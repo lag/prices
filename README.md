@@ -22,7 +22,7 @@ The code runs on a small machine I own through a Cloudflare tunnel. Please be ki
     "id": 0,
     "method": "accountSubscribe",
     "params": [
-        programId,
+        "8sLbNZoA1cfnvMJLPfp98ZLAnFSYCFApfJKMbiXNLwxj",
         {
             "encoding": "jsonParsed",
             "commitment": "confirmed",
