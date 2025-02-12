@@ -1,0 +1,47 @@
+/backend/testing
+*.db
+/backend/metadata_out.json
+.env
+__pycache__/
+/backend/Scripts
+/backend/Lib
+/backend/Include
+pyvenv.cfg
+
+
+# Node modules
+node_modules/
+package-lock.json
+
+# Build output
+build/
+dist/
+
+# Logs
+logs
+.log
+npm-debug.log*
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE and editor files
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# Miscellaneous
+*.tgz
+*.zip
