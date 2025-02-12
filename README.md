@@ -47,18 +47,24 @@ pip install -r requirements.txt
 cd ../frontend
 npm install
 ```
-3. Run the backend
-```bash
-cd backend
-python main.py
-```
-4. Run the frontend
+3. Run or build the frontend
 ```bash
 cd frontend
+npm run build
 npm start
 ```
+4. Setup the .env file and then run the backend
+```bash
+cd backend
+#Rename example.env to .env and modify the RPC urls and host/port.
+#This is too OS specific to write here...
+python main.py
+```
 
-The default port for the backend is 8001, and the default port for the frontend is 3000. You'll need to modify these settings on your own if you're trying to set this up in your own environment.
+The frontend must be built before the backend can run.
+
+The default port for the backend is 8001, and the default port for the frontend is 3000 for the development server. You'll need to modify these settings on your own if you're trying to set this up in your own environment.
+Once the frontend is built, it will run on port 8001 alongside the backend.
 
 You may have to wait a little while for the first prices to stream in and for the bars to generate, but once that is complete, you should be able to view the prices on the frontend.
 
