@@ -109,7 +109,7 @@ const BarChart = ({
                     },
                 },
                 timeScale: {
-                    timeVisible: timeScale === '1S' || timeScale === '1M',
+                    timeVisible: true,
                     secondsVisible: timeScale === '1S',
                     borderColor: '#333',
                     textColor: '#DDD',
@@ -124,11 +124,8 @@ const BarChart = ({
                 ? chartRef.current.addCandlestickSeries({
                     upColor: '#26a69a',
                     downColor: '#ef5350',
-                    borderVisible: false,
                     wickUpColor: '#26a69a',
                     wickDownColor: '#ef5350',
-                    borderUpColor: '#26a69a',
-                    borderDownColor: '#ef5350'
                 })
                 : chartRef.current.addBarSeries({
                     upColor: '#26a69a',
@@ -219,13 +216,8 @@ const BarChart = ({
   }, [data, timeframe]);
 
     return (
-        <div style={{ 
-            background: '#000', 
-            borderRadius: '4px', 
-            width: '100%',
-            border: '1px solid #DDD'
-        }}>
-            <div ref={chartContainerRef} />
+        <div className="w-full rounded-md bg-card text-card-foreground">
+            <div ref={chartContainerRef} style={{ width: '100%', height: `${height}px` }} />
         </div>
     );
 };
