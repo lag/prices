@@ -22,7 +22,7 @@ function connect() {
         reconnectTimeout = null;
     }
 
-    ws = new WebSocket('ws://127.0.0.1:8001/ws');
+    ws = new WebSocket('wss://prices.now/ws');
 
     ws.onopen = () => {
         self.postMessage({ 

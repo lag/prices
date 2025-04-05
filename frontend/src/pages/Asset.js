@@ -17,7 +17,7 @@ function Asset() {
 
     const handleTimeRangeChange = async (from, to, direction) => {
         try {
-            const response = await fetch(`http://127.0.0.1:8001/historical_prices/${asset}/${pair}?from=${Math.floor(from)}&to=${Math.ceil(to)}`);
+            const response = await fetch(`https://prices.now/historical_prices/${asset}/${pair}?from=${Math.floor(from)}&to=${Math.ceil(to)}`);
             const data = await response.json();
             const newBars = data.map(item => ({
                 time: item[4],
@@ -114,7 +114,7 @@ function Asset() {
 
     useEffect(() => {
         const fetchMetadata = async () => {
-            const response = await fetch(`http://127.0.0.1:8001/metadata/${asset}/${pair}`);
+            const response = await fetch(`https://prices.now/metadata/${asset}/${pair}`);
             const data = await response.json();
             setMetadata(data);
         };
@@ -125,7 +125,7 @@ function Asset() {
             
             try {
                 setIsLoading(true);
-                const response = await fetch(`http://127.0.0.1:8001/historical_prices/${asset}/${pair}`);
+                const response = await fetch(`https://prices.now/historical_prices/${asset}/${pair}`);
                 const data = await response.json();
 
                 const timestampMap = new Map();

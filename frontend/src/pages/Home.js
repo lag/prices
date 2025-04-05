@@ -9,7 +9,7 @@ function Home() {
   const { isConnected } = useWebSocket();
 
   useEffect(() => {
-    fetch('http://127.0.0.1:8001/assets')
+    fetch('https://prices.now/assets')
       .then(response => response.json())
       .then(data => setAssets(data))
       .catch(error => console.error('Error fetching assets:', error));
