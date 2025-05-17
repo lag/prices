@@ -55,14 +55,14 @@ function Asset() {
                 prevData.forEach(bar => barMap.set(bar.time, bar));
                 
                 if (direction === 'left') {
-                    const earliestExisting = Math.min(...prevData.map(bar => bar.time));
+                    const earliestExisting = prevData.reduce((min, bar) => bar.time < min ? bar.time : min, Infinity);
                     newBars.forEach(bar => {
                         if (bar.time < earliestExisting) {
                             barMap.set(bar.time, bar);
                         }
                     });
                 } else {
-                    const latestExisting = Math.max(...prevData.map(bar => bar.time));
+                    const latestExisting = prevData.reduce((max, bar) => bar.time > max ? bar.time : max, -Infinity);
                     newBars.forEach(bar => {
                         if (bar.time > latestExisting) {
                             barMap.set(bar.time, bar);
