@@ -39,29 +39,18 @@ const BarChart = ({
         }
     }, [data]);
 
-    const aggregateCandles = (rawData, minutes) => {
-      const groupedData = {};
-      
-      rawData.forEach(bar => {
-          const timestamp = Math.floor(bar.time / (minutes * 60)) * (minutes * 60);
-          
-          if (!groupedData[timestamp]) {
-              groupedData[timestamp] = {
-                  time: timestamp,
-                  open: bar.open,
-                  high: bar.high,
-                  low: bar.low,
-                  close: bar.close
-              };
-          } else {
-              groupedData[timestamp].high = Math.max(groupedData[timestamp].high, bar.high);
-              groupedData[timestamp].low = Math.min(groupedData[timestamp].low, bar.low);
-              groupedData[timestamp].close = bar.close;
-          }
-      });
+    // Reset chart when timeframe changes
+    useEffect(() => {
+        if (seriesRef.current && data && data.length > 0) {
+            const processedData = data.map(formatBar);
+            seriesRef.current.setData(processedData);
+            chartRef.current.timeScale().fitContent();
+            lastDataRef.current = processedData[processedData.length - 1];
+            initializedRef.current = true;
+        }
+    }, [timeframe]);
 
-      return Object.values(groupedData);
-  };
+
 
     // Handle resize
     useEffect(() => {
@@ -147,14 +136,18 @@ const BarChart = ({
                         const unloadedBarsToLeft = Math.abs(Math.floor(logicalRange.from));
                         
                         if (unloadedBarsToLeft > 20) {
-                            const timePerBar = (visibleRange.to - visibleRange.from) / 
-                                (logicalRange.to - logicalRange.from);
+                            const minutes = parseInt(timeframe.replace('M', ''));
+                            const timePerBar = minutes * 60; // Use actual timeframe instead of calculating from visible range
                             const theoreticalEarliestTime = visibleRange.from - 
                                 (unloadedBarsToLeft * timePerBar);
                             
                             if (theoreticalEarliestTime < currentDataRangeRef.current.from) {
+                                // Add some buffer to avoid requesting the same data multiple times
+                                const bufferTime = timePerBar * 5; // 5 bars buffer
+                                const adjustedFrom = theoreticalEarliestTime - bufferTime;
+                                
                                 lastRange = {
-                                    from: theoreticalEarliestTime,
+                                    from: adjustedFrom,
                                     to: currentDataRangeRef.current.from,
                                     direction: 'left'
                                 };
@@ -187,9 +180,7 @@ const BarChart = ({
     useEffect(() => {
       if (!seriesRef.current || !data || data.length === 0) return;
   
-      const minutes = parseInt(timeframe.replace('M', ''));
-      const rawData = minutes > 1 ? aggregateCandles(data, minutes) : data;
-      const processedData = rawData.map(formatBar);
+      const processedData = data.map(formatBar);
   
       if (!initializedRef.current) {
           seriesRef.current.setData(processedData);
@@ -213,7 +204,7 @@ const BarChart = ({
           seriesRef.current.update(lastBar);
           lastDataRef.current = lastBar;
       }
-  }, [data, timeframe]);
+  }, [data]);
 
     return (
         <div className="w-full rounded-md bg-card text-card-foreground">

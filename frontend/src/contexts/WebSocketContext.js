@@ -7,6 +7,8 @@ export function WebSocketProvider({ children }) {
     const [isConnected, setIsConnected] = useState(false);
     const [bars, setBars] = useState({});
     const workerRef = useRef(null);
+    const isConnectedRef = useRef(isConnected);
+    const sentMessagesRef = useRef([]); // Log of all sent messages
 
     const updatePrices = useCallback((newData) => {
         setPrices(currentPrices => {
@@ -59,6 +61,13 @@ export function WebSocketProvider({ children }) {
             switch (type) {
                 case 'connection_status':
                     setIsConnected(data.connected);
+                    if (data.connected && workerRef.current) {
+                        // Replay all logged messages
+                        console.log('Connection re-established. Replaying sent messages:', sentMessagesRef.current);
+                        sentMessagesRef.current.forEach(msg => {
+                            workerRef.current.postMessage({ type: 'send', data: msg });
+                        });
+                    }
                     break;
                 case 'message':
                     if (data.type === 'prices') {
@@ -75,17 +84,39 @@ export function WebSocketProvider({ children }) {
         // Start connection
         worker.postMessage({ type: 'connect' });
 
+        // Handle page visibility change
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                if (workerRef.current && !isConnectedRef.current) {
+                    console.log('Page became visible and WebSocket is likely disconnected. Attempting to reconnect via worker.');
+                    workerRef.current.postMessage({ type: 'connect' });
+                }
+            }
+        };
+
+        // Update the ref's current property when isConnected changes
+        isConnectedRef.current = isConnected;
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
         return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
             worker.postMessage({ type: 'disconnect' });
             worker.terminate();
+            // Clear sent messages on cleanup? Or keep them for next session if page is just hidden then shown?
+            // For now, let's keep them as per "log all messages and replay"
         };
-    }, [updatePrices, updateBars]);
+    }, [updatePrices, updateBars, isConnected]);
 
     const sendMessage = useCallback((message) => {
         if (workerRef.current && isConnected) {
             workerRef.current.postMessage({ type: 'send', data: message });
+            // Log the sent message
+            sentMessagesRef.current.push(message);
+            console.log('Message sent and logged:', message, 'All logged messages:', sentMessagesRef.current);
             return true;
         }
+        console.log('Message not sent (worker not ready or not connected):', message);
         return false;
     }, [isConnected]);
 
@@ -105,14 +136,28 @@ export function WebSocketProvider({ children }) {
         return bars[asset_id] || [];
     }, [bars]);
 
+    const clearBars = useCallback((asset_id) => {
+        setBars(currentBars => {
+            const updatedBars = { ...currentBars };
+            delete updatedBars[asset_id];
+            return updatedBars;
+        });
+    }, []);
+
     return (
         <WebSocketContext.Provider value={{ 
             prices, 
             isConnected,
-            reconnect: () => workerRef.current?.postMessage({ type: 'connect' }),
+            reconnect: () => {
+                if (workerRef.current) {
+                    console.log('Manual reconnect triggered.');
+                    workerRef.current.postMessage({ type: 'connect' });
+                }
+            },
             getPrice,
             getLatestBar,
             getBars,
+            clearBars,
             sendMessage,
         }}>
             {children}

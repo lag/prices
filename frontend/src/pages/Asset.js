@@ -26,7 +26,7 @@ const StatDisplay = ({ label, value, isLoading }) => (
 
 function Asset() {
     const { asset, key } = useParams();
-    const { sendMessage, isConnected, getBars } = useWebSocket();
+    const { sendMessage, isConnected, getBars, clearBars } = useWebSocket();
     const [historicalData, setHistoricalData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isMetaLoading, setIsMetaLoading] = useState(true);
@@ -36,10 +36,18 @@ function Asset() {
     const [price, setPrice] = useState(null);
     const [priceChange24h, setPriceChange24h] = useState(null);
     const [selectedTimeframe, setSelectedTimeframe] = useState('5M');
+    const [chartKey, setChartKey] = useState(0); // Key to force chart re-render
 
     const handleTimeRangeChange = async (from, to, direction) => {
         try {
-            const response = await fetch(`https://prices.now/historical_prices/${asset}/${key}?from=${Math.floor(from)}&to=${Math.ceil(to)}`);
+            const minutes = parseInt(selectedTimeframe.replace('M', ''));
+            
+            // Align timestamps to timeframe boundaries
+            const timeframeSeconds = minutes * 60;
+            const alignedFrom = Math.floor(from / timeframeSeconds) * timeframeSeconds;
+            const alignedTo = Math.ceil(to / timeframeSeconds) * timeframeSeconds;
+            
+            const response = await fetch(`https://prices.now/historical_prices/${asset}/${key}?from=${alignedFrom}&to=${alignedTo}&timeframe=${minutes}`);
             const data = await response.json();
             const newBars = data.map(item => ({
                 time: item[4],
@@ -116,23 +124,69 @@ function Asset() {
         
         if (currentBars.length === 0) return;
 
-        const latestBar = currentBars[currentBars.length - 1];
-        setPrice(latestBar.close);
-
-        setHistoricalData(prevData => {
-            if (!prevData) return currentBars;
-
-            const barMap = new Map();
-            prevData.forEach(bar => barMap.set(bar.time, bar));
+        const minutes = parseInt(selectedTimeframe.replace('M', ''));
+        
+        // Aggregate websocket bars according to timeframe
+        const aggregatedBars = [];
+        const groupedData = {};
+        
+        currentBars.forEach(bar => {
+            // Calculate the timestamp for the timeframe bar
+            const barTimestamp = Math.floor(bar.time / (minutes * 60)) * (minutes * 60);
             
-            currentBars.forEach(newBar => {
-                barMap.set(newBar.time, newBar);
-            });
-
-            return Array.from(barMap.values())
-                .sort((a, b) => a.time - b.time);
+            if (!(barTimestamp in groupedData)) {
+                groupedData[barTimestamp] = {
+                    time: barTimestamp,
+                    open: bar.open,
+                    high: bar.high,
+                    low: bar.low,
+                    close: bar.close
+                };
+            } else {
+                groupedData[barTimestamp].high = Math.max(groupedData[barTimestamp].high, bar.high);
+                groupedData[barTimestamp].low = Math.min(groupedData[barTimestamp].low, bar.low);
+                groupedData[barTimestamp].close = bar.close;
+            }
         });
-    }, [asset, key, getBars]);
+        
+        // Convert grouped data to aggregated bars
+        for (const timestamp of Object.keys(groupedData).sort((a, b) => Number(a) - Number(b))) {
+            aggregatedBars.push(groupedData[timestamp]);
+        }
+
+        if (aggregatedBars.length > 0) {
+            const latestBar = aggregatedBars[aggregatedBars.length - 1];
+            setPrice(latestBar.close);
+
+            setHistoricalData(prevData => {
+                if (!prevData) return aggregatedBars;
+
+                const barMap = new Map();
+                prevData.forEach(bar => barMap.set(bar.time, bar));
+                
+                // Merge new aggregated bars with existing data
+                aggregatedBars.forEach(newBar => {
+                    const existingBar = barMap.get(newBar.time);
+                    if (existingBar) {
+                        // Merge with existing bar - keep the open from existing, update high/low/close
+                        barMap.set(newBar.time, {
+                            time: newBar.time,
+                            open: existingBar.open, // Keep original open
+                            high: Math.max(existingBar.high, newBar.high),
+                            low: Math.min(existingBar.low, newBar.low),
+                            close: newBar.close // Update close with latest
+                        });
+                    } else {
+                        // New bar, add it
+                        barMap.set(newBar.time, newBar);
+                    }
+                });
+
+                return Array.from(barMap.values())
+                    .sort((a, b) => a.time - b.time);
+            });
+        }
+    }, [asset, key, getBars, selectedTimeframe]);
 
     useEffect(() => {
         // Reset states on param change
@@ -163,13 +217,28 @@ function Asset() {
             }
         };
 
+        const getDefaultTimeRange = (timeframe) => {
+            const minutes = parseInt(timeframe.replace('M', ''));
+            switch (minutes) {
+                case 1: return 60 * 60 * 12; // 12 hours for 1 minute
+                case 5: return 60 * 60 * 24 * 2; // 2 days for 5 minutes
+                case 15: return 60 * 60 * 24 * 6; // 6 days for 15 minutes
+                case 30: return 60 * 60 * 24 * 14; // 14 days for 30 minutes
+                case 60: return 60 * 60 * 24 * 30; // 30 days for 1 hour
+                case 240: return 60 * 60 * 24 * 90; // 90 days for 4 hours
+                default: return 60 * 60 * 24; // 1 day default
+            }
+        };
+
         const fetchHistoricalData = async () => {
            // Using the reverted fetch logic for historical data
            if (fetchedRef.current) return;
             fetchedRef.current = true;
             try {
-                let startTime = Math.floor(Date.now() / 1000) - (60 * 60 * 24);
-                const response = await fetch(`https://prices.now/historical_prices/${asset}/${key}?from=${startTime}`);
+                const defaultRange = getDefaultTimeRange(selectedTimeframe);
+                let startTime = Math.floor(Date.now() / 1000) - defaultRange;
+                const minutes = parseInt(selectedTimeframe.replace('M', ''));
+                const response = await fetch(`https://prices.now/historical_prices/${asset}/${key}?from=${startTime}&timeframe=${minutes}`);
                 if (!response.ok) throw new Error(`Historical data fetch failed: ${response.statusText} (Status: ${response.status})`);
                 const data = await response.json();
                 if (!Array.isArray(data)) throw new TypeError(`Expected historical data to be an array, but received: ${typeof data}`);
@@ -196,7 +265,8 @@ function Asset() {
                 if (sortedData.length > 0) {
                     const startTime = sortedData[0].time;
                     const endTime = sortedData[sortedData.length - 1].time;
-                    for (let t = startTime; t <= endTime; t += 60) {
+                    const interval = minutes * 60; // Use timeframe interval instead of 60 seconds
+                    for (let t = startTime; t <= endTime; t += interval) {
                          const existingBar = sortedData.find(bar => bar.time === t);
                          if (existingBar) {
                              formattedData.push(existingBar);
@@ -221,7 +291,19 @@ function Asset() {
         fetchMetadata();
         fetchHistoricalData();
 
-    }, [asset, key]);
+    }, [asset, key, selectedTimeframe]);
+
+    // Reset chart when timeframe changes
+    useEffect(() => {
+        setHistoricalData(null);
+        setChartKey(prev => prev + 1);
+        fetchedRef.current = false;
+        // Clear websocket bars when timeframe changes
+        const assetKey = `${asset}_${key}`;
+        if (assetKey) {
+            clearBars(assetKey);
+        }
+    }, [selectedTimeframe, asset, key, clearBars]);
 
     useEffect(() => {
         const updateTitle = () => {
@@ -323,6 +405,7 @@ function Asset() {
                                 <SelectItem value="15M">15 Minutes</SelectItem>
                                 <SelectItem value="30M">30 Minutes</SelectItem>
                                 <SelectItem value="60M">1 Hour</SelectItem>
+                                <SelectItem value="240M">4 Hours</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
@@ -332,6 +415,7 @@ function Asset() {
                             <Skeleton className="h-full w-full" />
                         ) : historicalData && historicalData.length > 0 ? (
                             <BarChart 
+                                key={chartKey}
                                 data={historicalData}
                                 timeScale={selectedTimeframe}
                                 chartType="candlestick"
