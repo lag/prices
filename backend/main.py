@@ -113,7 +113,17 @@ async def update_prices():
                     if 'params' not in message:continue
                     if 'subscription' not in message['params']:continue
                     if message['params']['subscription'] not in subscription_to_program:continue
-                    if type(message['params']['result']['value']['data']) != list:continue
+
+                    try:
+                        if type(message['params']['result']['value']['data']) != list:
+                            print(message)
+                            continue
+                    except:
+                        print(message)
+                        if 'params' in message and 'error' in message['params'] and 'message' in message['params']['error']:
+                            print(message['params']['error']['message'])
+                            forced_error_here()
+                        continue
 
                     program = subscription_to_program[message['params']['subscription']]
                     account_data = base64.b64decode(message['params']['result']['value']['data'][0])
@@ -278,7 +288,7 @@ async def shutdown_event():
         pass
 
 @app.get("/historical_prices/{asset_id}/{pair}")
-async def get_historical_prices(request: Request, asset_id: int, pair: str):
+async def get_historical_prices(request: Request, asset_id: int, pair: str, timeframe: int = 1):
     table = f'historical_prices_{asset_id}_{pair.replace("-", "_")}'
     if table not in app.state.valid_tables:return {'error': 'Invalid pair', 'endpoint': '/historical_prices'}
 
@@ -294,12 +304,47 @@ async def get_historical_prices(request: Request, asset_id: int, pair: str):
     if from_timestamp-to_timestamp > (60*60*24*30)*1000: # 1 month in one query
         return {'error': 'Time range too large', 'endpoint': '/historical_prices'}
 
-    cursor.execute(f'SELECT open, high, low, close, timestamp/1000 FROM {table} WHERE timestamp > ? AND timestamp < ? ORDER BY timestamp DESC', (from_timestamp, to_timestamp))
+    cursor.execute(f'SELECT open, high, low, close, timestamp/1000 FROM {table} WHERE timestamp > ? AND timestamp < ? ORDER BY timestamp ASC', (from_timestamp, to_timestamp))
     prices = cursor.fetchall()
+
+    if timeframe > 1:
+        candles = []
+        grouped_data = {}
+        
+        for price in prices:
+            timestamp = price[4]
+            bar_timestamp = (timestamp // (timeframe * 60)) * (timeframe * 60)
+            
+            # Group by timeframe intervals -- logic was a bit too complex to do in SQL (at least cleanly for now)
+            if bar_timestamp not in grouped_data:
+                grouped_data[bar_timestamp] = {
+                    'open': price[0],
+                    'high': price[1],
+                    'low': price[2],
+                    'close': price[3],
+                    'timestamp': bar_timestamp
+                }
+            else:
+                grouped_data[bar_timestamp]['high'] = max(grouped_data[bar_timestamp]['high'], price[1])
+                grouped_data[bar_timestamp]['low'] = min(grouped_data[bar_timestamp]['low'], price[2])
+                grouped_data[bar_timestamp]['close'] = price[3]
+        
+        # Convert grouped data to candles array
+        for timestamp in sorted(grouped_data.keys()):
+            data = grouped_data[timestamp]
+            candles.append([
+                data['open'],
+                data['high'],
+                data['low'],
+                data['close'],
+                data['timestamp']
+            ])
+    else:
+        candles = prices
 
     cursor.close()
     conn.close()
-    return prices
+    return candles
 
 @app.get("/prices/{asset_id}/{pair}")
 async def get_prices(asset_id: str, pair: str):
